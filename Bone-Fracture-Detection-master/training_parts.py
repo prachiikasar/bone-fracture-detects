@@ -72,10 +72,18 @@ train_df, test_df = train_test_split(images, train_size=0.9, shuffle=True, rando
 # The resulting generators can then be used to train and evaluate a deep learning model.
 
 # now we have 10% test, 72% training and 18% validation
-
+# Body Part Classification: Increased augmentation for robustness
 train_generator = tf.keras.preprocessing.image.ImageDataGenerator(
     preprocessing_function=tf.keras.applications.resnet50.preprocess_input,
-    validation_split=0.2)
+    validation_split=0.2,
+    rotation_range=30,
+    zoom_range=0.2,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    vertical_flip=True,
+    fill_mode='nearest'
+)
 
 test_generator = tf.keras.preprocessing.image.ImageDataGenerator(
     preprocessing_function=tf.keras.applications.resnet50.preprocess_input)
@@ -124,23 +132,31 @@ pretrained_model = tf.keras.applications.resnet50.ResNet50(
     weights='imagenet',
     pooling='avg')
 
-# for faster performance
-pretrained_model.trainable = False
+# fine-tune the top layers of ResNet50 for body part classification
+pretrained_model.trainable = True
+for layer in pretrained_model.layers[:120]:
+    layer.trainable = False
 
 inputs = pretrained_model.input
-x = tf.keras.layers.Dense(128, activation='relu')(pretrained_model.output)
+x = tf.keras.layers.Dense(256, activation='relu')(pretrained_model.output)
+x = tf.keras.layers.Dropout(0.3)(x)
+x = tf.keras.layers.Dense(128, activation='relu')(x)
+x = tf.keras.layers.Dropout(0.2)(x)
 x = tf.keras.layers.Dense(50, activation='relu')(x)
 outputs = tf.keras.layers.Dense(len(Labels), activation='softmax')(x)
 model = tf.keras.Model(inputs, outputs)
 print(model.summary())
 
 # Adam optimizer with low learning rate for better accuracy
-model.compile(optimizer=Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(learning_rate=0.00005), loss='categorical_crossentropy', metrics=['accuracy'])
 
 # early stop when our model is over fit or vanishing gradient, with restore best values
-callbacks = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
-history = model.fit(train_images, validation_data=val_images, epochs=25,
-                    callbacks=[callbacks])
+callbacks = [
+    tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=4, restore_best_weights=True),
+    tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=2, min_lr=1e-6)
+]
+history = model.fit(train_images, validation_data=val_images, epochs=30,
+                    callbacks=callbacks)
 
 # save model to this path
 model.save(THIS_FOLDER + "/weights/ResNet50_BodyParts.h5")

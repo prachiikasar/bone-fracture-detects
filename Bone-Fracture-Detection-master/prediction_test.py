@@ -21,6 +21,8 @@ def load_path(path):
             label = lab
             path_l = path_p + '/' + str(lab)
             for img in os.listdir(path_l):
+                if img.startswith("cam_") or img.startswith("gradcam_"):
+                    continue
                 img_path = path_l + '/' + str(img)
                 dataset.append(
                     {

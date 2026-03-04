@@ -1,12 +1,16 @@
 import os
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+if genai:
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 class ChatbotService:
     @staticmethod
@@ -19,7 +23,7 @@ class ChatbotService:
         
         # 1. Try Gemini AI first if API Key is available
         api_key = os.getenv("GEMINI_API_KEY")
-        if api_key and api_key != "your_gemini_api_key_here" and len(api_key) > 5:
+        if genai and api_key and api_key != "your_gemini_api_key_here" and len(api_key) > 5:
             try:
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 

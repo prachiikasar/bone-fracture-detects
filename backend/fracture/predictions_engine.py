@@ -168,7 +168,14 @@ def make_gradcam_heatmap(img_array, model, last_conv_layer_name="conv5_block3_ou
         return None
 
     with tf.GradientTape() as tape:
-        last_conv_layer_output, preds = grad_model(img_array)
+        outputs = grad_model(img_array)
+        last_conv_layer_output = outputs[0]
+        preds = outputs[1]
+        
+        # Ensure preds is a tensor for indexing
+        if isinstance(preds, list):
+            preds = preds[0]
+            
         if pred_index is None:
             pred_index = tf.argmax(preds[0])
         class_channel = preds[:, pred_index]
@@ -320,7 +327,27 @@ def predict(img, model="Parts"):
             inference_model = "Shoulder"
 
         chosen_model = get_model(inference_model)
-        preds = chosen_model.predict(x)
+        
+        # --- ENHANCED ACCURACY: Test-Time Augmentation (TTA) ---
+        # 3-pass prediction (Original, Flipped, Zoomed) for maximum robustness
+        # 1. Original
+        preds_orig = chosen_model.predict(x)
+        
+        # 2. Horizontal Flip
+        x_flip = np.flip(x, axis=2)
+        preds_flip = chosen_model.predict(x_flip)
+        
+        # 3. Simulated Center Zoom (10% crop)
+        h, w = x.shape[1:3]
+        ch, cw = int(h*0.9), int(w*0.9)
+        start_h, start_w = (h-ch)//2, (w-cw)//2
+        x_zoom_raw = x[0, start_h:start_h+ch, start_w:start_w+cw, :]
+        x_zoom = cv2.resize(x_zoom_raw, (224, 224))
+        x_zoom = np.expand_dims(x_zoom, axis=0)
+        preds_zoom = chosen_model.predict(x_zoom)
+        
+        # Ensemble Average
+        preds = (preds_orig * 0.5) + (preds_flip * 0.25) + (preds_zoom * 0.25)
         
         # Index 0 = Fractured
         prob_fracture = preds[0][0]
